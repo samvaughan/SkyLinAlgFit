@@ -4,7 +4,8 @@ from astropy.io import fits
 
 import pdb
 import sys
-import continuum 
+import continuum
+from spectools import spectrum
 
 import argparse
 
@@ -161,6 +162,7 @@ GalName=args.GalName
 if GalName=="NGC1277":
     data_list=["ms047_048.fits", "ms049_048.fits", "ms050_051.fits", "ms052_051.fits", "ms056_057.fits", "ms058_057.fits", "ms059_060.fits"]
     cubepath="/Volumes/SPV_SWIFT/SWIFT/NGC1277"
+    z_gal=0.017044
 
 
 elif GalName=="IC843":
@@ -183,7 +185,9 @@ continuum_fits=np.zeros([len(data_list), 4112])
 lamdas=np.arange(6300, 6300+4112)
 
 
-fig, axs=plt.subplots(nrows=2, ncols=2)
+telluric=fits.open("corrected_telluric.fits")[0].data
+
+#fig, axs=plt.subplots(nrows=2, ncols=2)
 
 from matplotlib.ticker import AutoMinorLocator
 
@@ -201,6 +205,49 @@ for i, (name) in enumerate(data_list):
     #final_results_rows[i, :, :]=skyfit_rows(data, a, b, r)
     final_results_fullimage[i, :, :]=skyfit_fullimage(data)
 
+    spec=spectrum(lamdas/(1+z_gal), final_results_fullimage[i, 0, :]/telluric)
+
+    ew, _, cont, band=spec.irindex(1.0, index="FeH", vac_or_air="air")
+
+    print "Ew is {}".format(ew)
+
+
+    plt.plot(spec.lam[np.where(lamdas>9800)], spec.flam[0][np.where(lamdas>9800)]+i*0.2, label="{}: FeH={}".format(name, ew))
+
+
+    from matplotlib.patches import Rectangle
+
+
+    x=spec.lam[np.where(lamdas>9800)]
+    for j in range(0, len(cont), 2):
+        #print("Start of continuum is {}".format(cont[i]))
+        #print("End of continuum is {}".format(cont[i+1]))
+        #print(np.where(x>cont[i])[0][0])
+        start=np.where(x>cont[j])[0][0]
+        stop=np.where(x>cont[j+1])[0][0]
+        #plt.plot(x[start:stop], subtract[start:stop], c="r")
+
+        width=x[stop]-x[start]
+        #print("Drawing a Red rectangle from {} to {}. Stop is {}".format(x[start], x[start]+width, x[stop]))
+        currentAxis = plt.gca()
+        currentAxis.add_patch(Rectangle((x[start], 0), width, 10.0, facecolor="red", alpha=0.05))
+
+    for j in range(0, len(band), 2):
+        #print("Start of band is {}".format(cont[i]))
+        #print("End of band is {}".format(cont[i+1]))
+
+        start=np.where(x>band[j])[0][0]
+        stop=np.where(x>band[j+1])[0][0]
+        #plt.plot(x[start:stop], subtract[start:stop], c="b")
+
+        width=x[stop]-x[start]
+        #print("Drawing a blue rectangle from {} to {}. Stop is {}".format(x[start], x[start]+width, x[stop]))
+        #currentAxis = plt.gca()
+        #print(start - width/2.0)
+        currentAxis.add_patch(Rectangle((x[start], 0), width, 10.0, facecolor="blue", alpha=0.05))
+
+
+    """
     #Find the gradient of the sky array. Skylines correspond to sharp spikes in the gradient, so we can get rid of them by ignoring pixels with a large dx.
     dx=np.gradient(final_results_fullimage[i, 1, :])
     
@@ -240,11 +287,10 @@ for i, (name) in enumerate(data_list):
     cubename="{0}/{0}_sky_cont_sub_{1}".format(GalName, name)
     fits.writeto(cubename, data-sky_cont_cube, header=header, clobber=True)
     print "Saving Cube {} as {}".format(i+1, cubename)
+    """
 
 
 
-fig = plt.gcf()
-fig.set_size_inches(18.5, 10.5)
-plt.savefig("{0}/{0}_sky_continuum.pdf".format(GalName), dpi=200)
+plt.legend()
 plt.show()
 
